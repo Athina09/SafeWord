@@ -1,0 +1,235 @@
+openapi: 3.0.3
+info:
+  title: SafeWord Bank Simulator API
+  version: 0.1.0-draft
+  description: |
+    DRAFT — needs sign-off from both Person A and Person B before merging changes.
+    Duress rule: when pin_type=duress, the backend never calls the risk engine, always holds,
+    alerts the fraud team, never auto-releases, and status always reads "pending" to the app.
+paths:
+  /payments/initiate:
+    post:
+      summary: Start a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InitiateRequest' }
+      responses:
+        '200':
+          description: Decision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InitiateResponse' }
+  /payments/{id}/confirm:
+    post:
+      summary: User continues after a voice prompt
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200':
+          description: Updated status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+  /payments/{id}/cancel:
+    post:
+      summary: User cancels
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200':
+          description: Updated status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+  /payments/{id}/status:
+    get:
+      summary: Poll status (duress holds always report "pending")
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+  /payees:
+    post:
+      summary: Add a payee (input to workaround detector)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayeeRequest' }
+      responses:
+        '200': { description: Payee added }
+  /limits:
+    patch:
+      summary: Change daily limit (input to workaround detector)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [daily_limit, signals]
+              properties:
+                daily_limit: { type: number }
+                signals: { $ref: '#/components/schemas/Signals' }
+      responses:
+        '200': { description: Limit updated }
+  /approvals/pending:
+    get:
+      summary: Trusted person lists payments awaiting approval
+      responses:
+        '200':
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Approval' }
+  /approvals/{id}:
+    post:
+      summary: Trusted person approves or rejects
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approve]
+              properties:
+                approve: { type: boolean }
+      responses:
+        '200': { description: Recorded }
+  /cases:
+    get:
+      summary: Held payments for the fraud team, duress first then by risk
+      responses:
+        '200':
+          description: Cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Case' }
+  /cases/{id}:
+    get:
+      summary: One case with reasons and signal timeline
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200':
+          description: Case
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Case' }
+  /cases/{id}/report:
+    get:
+      summary: Structured cybercrime-portal incident report (simulated format)
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200': { description: Report }
+  /accounts/{id}:
+    get:
+      summary: Balance, hold, limit and payees (added by Person B; not in the original draft)
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200': { description: Account }
+  /notifications:
+    get:
+      summary: Trusted-person and fraud-team notification hooks (demo polling)
+      responses:
+        '200': { description: Notifications }
+  /audit:
+    get:
+      summary: Audit log of every decision, optionally for one payment
+      responses:
+        '200': { description: Audit entries }
+  /cases/{id}/release:
+    post:
+      summary: Officer releases (never automatic)
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200': { description: Released }
+  /cases/{id}/reverse:
+    post:
+      summary: Officer reverses
+      parameters: [{ $ref: '#/components/parameters/PaymentId' }]
+      responses:
+        '200': { description: Reversed }
+components:
+  parameters:
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Signals:
+      type: object
+      description: Scores and flags only. Raw behaviour data never leaves the phone.
+      required: [call_active, caller_in_contacts, screen_shared, behaviour_anomaly, hour_of_day]
+      properties:
+        call_active: { type: boolean }
+        caller_in_contacts: { type: boolean, nullable: true }
+        screen_shared: { type: boolean }
+        behaviour_anomaly: { type: number, minimum: 0, maximum: 1, description: On-device TFLite score }
+        hour_of_day: { type: integer, minimum: 0, maximum: 23 }
+        time_to_pay_ms: { type: integer }
+    InitiateRequest:
+      type: object
+      required: [account_id, payee_id, amount, pin_type, signals]
+      properties:
+        account_id: { type: string }
+        payee_id: { type: string }
+        amount: { type: number, description: INR }
+        pin_type: { type: string, enum: [normal, duress] }
+        signals: { $ref: '#/components/schemas/Signals' }
+    InitiateResponse:
+      type: object
+      required: [decision, payment_id, reasons, prompt_lang]
+      properties:
+        decision: { type: string, enum: [allow, prompt, hold] }
+        payment_id: { type: string }
+        reasons:
+          type: array
+          items: { type: string }
+          description: Plain-language SHAP reasons. Empty for duress holds.
+        prompt_lang: { type: string, enum: [en, hi, ta] }
+    StatusResponse:
+      type: object
+      required: [payment_id, status]
+      properties:
+        payment_id: { type: string }
+        status: { type: string, enum: [pending, success, cancelled, rejected] }
+    PayeeRequest:
+      type: object
+      required: [account_id, name, upi_id, signals]
+      properties:
+        account_id: { type: string }
+        name: { type: string }
+        upi_id: { type: string }
+        signals: { $ref: '#/components/schemas/Signals' }
+    Approval:
+      type: object
+      properties:
+        payment_id: { type: string }
+        senior_name: { type: string }
+        payee_name: { type: string }
+        amount: { type: number }
+        reasons: { type: array, items: { type: string } }
+    Case:
+      type: object
+      properties:
+        payment_id: { type: string }
+        state: { type: string, enum: [held, released, reversed] }
+        duress: { type: boolean }
+        risk_score: { type: number, nullable: true, description: Null for duress; the risk engine is never called }
+        golden_hour_ends_at: { type: string, format: date-time, nullable: true }
+        timeline: { type: array, description: Audit entries; only on GET /cases/{id}, items: { type: object } }
+        payee_graph: { type: object, description: Payee neighbourhood; only on GET /cases/{id} }
+        reasons: { type: array, items: { type: string } }
+        amount: { type: number }
+        payee_name: { type: string }
+        held_at: { type: string, format: date-time }
+        signals: { $ref: '#/components/schemas/Signals' }

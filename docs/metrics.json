@@ -1,0 +1,36 @@
+{
+  "model_on_heldout_synthetic_data": {
+    "thresholds": {
+      "prompt": 0.25,
+      "hold": 0.6
+    },
+    "test_rows": 6800,
+    "genuine_payments": 6000,
+    "false_hold_rate": 0.0003,
+    "false_prompt_rate": 0.0005,
+    "scams_held_pct": 99.8,
+    "scams_intervened_pct": 100.0,
+    "scams_caught_by_script_pct": {
+      "digital_arrest": 100.0,
+      "investment": 100.0,
+      "kyc_update": 100.0,
+      "split": 100.0,
+      "whitelist_trick": 100.0
+    }
+  },
+  "demo_scenarios": {
+    "1_normal": "allow",
+    "2_digital_arrest": "hold",
+    "3_split_6x9500": [
+      "hold",
+      "hold",
+      "hold",
+      "hold",
+      "hold",
+      "hold"
+    ],
+    "4_whitelist_trick": "hold",
+    "5_silent_sos": "hold",
+    "median_time_to_intervene_ms": 1.9
+  }
+}
